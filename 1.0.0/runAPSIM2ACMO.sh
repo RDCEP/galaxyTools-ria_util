@@ -1,24 +1,34 @@
 batchId=$1
 
+# To be sure...
+cd $THISDIR/result/$batchId
+
 # Run QuadUI
-java -jar ../../$quadui -cli -clean -n -A 1.json $PWD
+java -jar $THISDIR/$quadui -cli -clean -n -A 1.json $THISDIR/result/$batchId 2>&1 1>$THISDIR/quadui.output
 
 # Setup Cultivar files
-if [ -d "../../cul/apsim_specific" ]
+if [ -d "$THISDIR/cul/apsim_specific" ]
 then
-  cp -f ../../cul/apsim_specific/* $PWD/APSIM/.
+  cp -f $THISDIR/cul/apsim_specific/* $THISDIR/result/$batchId/APSIM/.
 fi
 
 # Generate output zip package for APSIM input files
-cd APSIM
-zip -r -q ../../retIn_$batchId.zip *
-cd ..
+cd $THISDIR/result/$batchId/APSIM
+zip -r -q $THISDIR/retIn_$batchId.zip *
+cd $THISDIR/result/$batchId
 
 # Setup APSIM model
-cp -f $PWD/APSIM/* .
+cp -f $THISDIR/result/$batchId/APSIM/* .
 
 # Run APSIM model
-mono ../../Model/ApsimToSim.exe AgMip.apsim 2>/dev/null
+mono $THISDIR/Model/ApsimToSim.exe AgMip.apsim 2>&1 1>$THISDIR/ApsimToSim.output #2>/dev/null
+if [ -s $THISDIR/ApsimToSim.output ]
+then 
+  echo "AgMip.apsim OK"
+else
+  echo "AgMip.apsim CORE DUMP"
+  exit -1
+fi
 
 tmp_fifofile="./control.fifo"
 mkfifo $tmp_fifofile
@@ -31,26 +41,36 @@ for ((i=0;i<$thread;i++));do
   echo
 done >&6 
 
+declare -i count
+count=1
 for file in *.sim; do
 {
   read -u6
   filename="${file%.*}"
-  ../../Model/ApsimModel.exe $file >> $filename.sum 2>/dev/null
+  $THISDIR/Model/ApsimModel.exe $file >> $filename.sum 2>&1 1>$THISDIR/ApsimToSim.${count}.output #2>/dev/null
   echo >&6
+  if [ -s $THISDIR/ApsimToSim.${count}.output ]
+  then
+    echo "AgMip.apsim ${count} OK"
+  else
+    echo "AgMip.apsim ${count} CORE DUMP"
+    exit -1
+  fi
+  count=$count+1
 } &
 done
 wait
 exec 6>&-
 
 # Generate the output zip package for APSIM output files
-mkdir output
-mv -f *.out output
-mv -f *.sum output
-mv -f ACMO_meta.dat output
-cd output
-zip -r -q ../../retOut_$batchId.zip *
-cd ..
+mkdir $THISDIR/result/$batchId/output
+mv -f *.out $THISDIR/result/$batchId/output
+mv -f *.sum $THISDIR/result/$batchId/output
+mv -f ACMO_meta.dat $THISDIR/result/$batchId/output
+cd $THISDIR/result/$batchId/output
+zip -r -q $THISDIR/retOut_$batchId.zip *
+cd $THISDIR/result/$batchId
 
 # Run ACMOUI
-java -Xms256m -Xmx512m -jar ../../$acmoui -cli -apsim "output" "$PWD/output"
-cp -f output/*.csv ../$batchId.csv
+java -Xms256m -Xmx512m -jar $THISDIR/$acmoui -cli -apsim "output" "$THISDIR/result/$batchId/output"  2>&1 1>$THISDIR/acmoui.output
+cp -f $THISDIR/output/*.csv $THISDIR/$batchId.csv
