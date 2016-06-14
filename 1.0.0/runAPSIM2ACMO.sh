@@ -39,23 +39,35 @@ rm $tmp_fifofile
 
 thread=`cat /proc/cpuinfo | grep processor | wc -l`
 echo "detect $thread cores, will use $thread threads to run APSIM"
-for ((i=0;i<$thread;i++));do 
-  echo
-done >&6 
 
-declare -i count
-count=1
+cat > $PWD/ApsimModel.sh << EOF
+#!/bin/bash
+if [ "\$#" -ne 1 ]; then
+    echo "Illegal number of parameters"
+    exit
+fi
+file=\$1
+while true; do
+  filename="\${file%.*}"
+  echo "Executing \$filename"
+  $THISDIR/Model/ApsimModel.exe \$file >> \${filename}.sum 2>\${filename}.error
+  errors=\`ls -al \${filename}.error | awk '{ if (\$5>95) { print \$9 }}'\`
+  if [ "\$errors" == "" ];
+  then
+    break
+  fi
+done
+EOF
+chmod +x $PWD/ApsimModel.sh
+
 for file in *.sim; do
 {
-  read -u6
-  filename="${file%.*}"
-  $THISDIR/Model/ApsimModel.exe $file >> ${filename}.sum 2>/dev/null
-  echo >&6
-  count=$count+1
-} &
+  filename="\${file%.*}"
+  echo "Submitting $filename"
+  sem -j $thread "$PWD/ApsimModel.sh $file" 
+} 
 done
-wait
-exec 6>&-
+sem --wait
 
 # Generate the output zip package for APSIM output files
 mkdir $THISDIR/result/$batchId/output
