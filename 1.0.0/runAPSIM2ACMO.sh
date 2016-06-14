@@ -24,10 +24,12 @@ cp -f $THISDIR/result/$batchId/APSIM/* .
 mono $THISDIR/Model/ApsimToSim.exe AgMip.apsim 2>&1 1>$THISDIR/ApsimToSim.output #2>/dev/null
 if [ -s $THISDIR/ApsimToSim.output ]
 then 
-  echo "AgMip.apsim OK"
+  echo "AgMip.apsim ERROR"
+  cat $THISDIR/ApsimToSim.output
+  echo "-----------------------"
+  exit 1
 else
-  echo "AgMip.apsim CORE DUMP"
-  exit -1
+  echo "AgMip.apsim OK"
 fi
 
 tmp_fifofile="./control.fifo"
@@ -47,15 +49,8 @@ for file in *.sim; do
 {
   read -u6
   filename="${file%.*}"
-  $THISDIR/Model/ApsimModel.exe $file >> $filename.sum 2>&1 1>$THISDIR/ApsimToSim.${count}.output #2>/dev/null
+  $THISDIR/Model/ApsimModel.exe $file >> ${filename}.sum 2>/dev/null
   echo >&6
-  if [ -s $THISDIR/ApsimToSim.${count}.output ]
-  then
-    echo "AgMip.apsim ${count} OK"
-  else
-    echo "AgMip.apsim ${count} CORE DUMP"
-    exit -1
-  fi
   count=$count+1
 } &
 done
