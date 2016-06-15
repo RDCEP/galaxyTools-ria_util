@@ -14,7 +14,7 @@ fi
 
 # Generate output zip package for APSIM input files
 cd $THISDIR/result/$batchId/APSIM
-zip -r -q $THISDIR/retIn_$batchId.zip *
+zip -r -q $THISDIR/result/retIn_$batchId.zip *
 cd $THISDIR/result/$batchId
 
 # Setup APSIM model
@@ -32,13 +32,8 @@ else
   echo "AgMip.apsim OK"
 fi
 
-tmp_fifofile="./control.fifo"
-mkfifo $tmp_fifofile
-exec 6<>$tmp_fifofile
-rm $tmp_fifofile
-
-thread=`cat /proc/cpuinfo | grep processor | wc -l`
-echo "detect $thread cores, will use $thread threads to run APSIM"
+threads=`nproc`
+echo "detect $threads cores, will use $threads threads to run APSIM"
 
 cat > $PWD/ApsimModel.sh << EOF
 #!/bin/bash
@@ -62,9 +57,9 @@ chmod +x $PWD/ApsimModel.sh
 
 for file in *.sim; do
 {
-  filename="\${file%.*}"
+  filename="${file%.*}"
   echo "Submitting $filename"
-  sem -j $thread "$PWD/ApsimModel.sh $file" 
+  sem -j $threads "$PWD/ApsimModel.sh $file"
 } 
 done
 sem --wait
@@ -75,9 +70,9 @@ mv -f *.out $THISDIR/result/$batchId/output
 mv -f *.sum $THISDIR/result/$batchId/output
 mv -f ACMO_meta.dat $THISDIR/result/$batchId/output
 cd $THISDIR/result/$batchId/output
-zip -r -q $THISDIR/retOut_$batchId.zip *
+zip -r -q $THISDIR/result/retOut_$batchId.zip *
 cd $THISDIR/result/$batchId
 
 # Run ACMOUI
-java -Xms256m -Xmx512m -jar $THISDIR/$acmoui -cli -apsim "output" "$THISDIR/result/$batchId/output"  2>&1 1>$THISDIR/acmoui.output
-cp -f $THISDIR/output/*.csv $THISDIR/$batchId.csv
+java -Xms256m -Xmx512m -jar $THISDIR/$acmoui -cli -apsim "output" "$THISDIR/result/$batchId/output"  2>&1 1>$THISDIR/result/$batchId/acmoui.output
+cp -f $THISDIR/result/$batchId/output/*.csv $THISDIR/result/$batchId.csv
